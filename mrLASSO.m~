@@ -82,7 +82,7 @@ else
         ROIs{s} = structure.ROIs;
         roiIdx{s} = ROIs{s}.ndx;
         numROIs = length(roiIdx{1}); % all subjects should have same number of ROIs
-        structure = load([projectDir,'/forwardAndRois-skeri' num2str(subjectList(s))]);
+        structure = load([projectDir,'/forward_data/forwardAndRois-skeri' num2str(subjectList(s))]);
         fwdMatrix = structure.fwdMatrix;
         ridgeSizes(s) = numel(cat(2,roiIdx{s}{:})); % total ROI size by subject
         stackedForwards = blkdiag(stackedForwards, fwdMatrix(:,[roiIdx{s}{:}]));
@@ -115,7 +115,7 @@ for s=1:numSubs
         else
         end
         SNR = 0.1;
-        initStrct = load([projectDir,'/Subject_48_initialization']);
+        initStrct = load([projectDir,'/forward_data/Subject_48_initialization');
         [Y(128*(s-1)+1:128*s,:), ~, signal{s}, noise] = GenerateData(ROIs{s},idx,initStrct.VertConn,fwdMatrix,SNR, phase);
     else
         subjId = subjectList{s};
@@ -163,14 +163,14 @@ if doMinNorm
     if simulateData
         save('~/Desktop/sim_minNorm.mat','betaMinNorm','lambdaMinNorm','rsquaredMinNorm');
     else
-        save('~/Desktop/minNorm.mat','betaMinNorm','lambdaMinNorm','rsquaredMinNorm');
+        save('minNorm.mat','betaMinNorm','lambdaMinNorm','rsquaredMinNorm');
     end
 else
     disp('Loading minimum norm solution');
     if simulateData
-        load('~/Desktop/sim_minNorm.mat');
+        load('sim_minNorm.mat');
     else
-        load('~/Desktop/minNorm.mat');
+        load('minNorm.mat');
     end
 end
 
