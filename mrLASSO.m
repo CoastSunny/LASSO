@@ -5,11 +5,11 @@ close all;
 addpath(genpath(pwd));
 
 % MAIN PARAMETERS
-numSubs = 6; % if left empty, use all subs
+numSubs = 2; % if left empty, use all subs
 doMinNorm = true;    % compute minimum norm or load in previous version?
 newSubs = false;      % subjects and ROIs used in original paper or new ones
 simulateData = true; % simulated or real data?
-projectDir = '~/Dropbox/ONGOING/LASSO/forward_data'; %'/Volumes/svndl/4D2/kohler/SYM_16GR/SOURCE';
+projectDir = '/Users/ales/Downloads/forward_data';%'~/Dropbox/ONGOING/LASSO/forward_data'; %'/Volumes/svndl/4D2/kohler/SYM_16GR/SOURCE';
 condNmbr = 15; % which condition to plot, only relevant if new subs and real data
 
 if ~newSubs;
@@ -143,21 +143,42 @@ indices = get_indices(grpSizes);
 penalties = get_group_penalties(X, indices);
 
 % center Y, X, stackedForwards
-Y = scal(Y, mean(Y));
-X = scal(X, mean(X));
-stackedForwards = scal(stackedForwards, mean(stackedForwards));
+%scal isn't a matlab builtin, changed to use bsxfun() --jma
+%Y = scal(Y, mean(Y));
+%X = scal(X, mean(X));
+
+Y = bsxfun(@minus,Y, mean(Y));
+X = bsxfun(@minus,X, mean(X));
+
+%changed to bsxfun --jma
+%stackedForwards = scal(stackedForwards, mean(stackedForwards));
+stackedForwards = bsxfun(@minus,stackedForwards, mean(stackedForwards));
+
 n = numel(Y);
 ssTotal = norm(Y, 'fro')^2 / n;
 
 % use first 2 columns of v as time basis
 [~, ~, v] = svd(Y);
 Ytrans = Y * v(:, 1:numCols);
-Ytrans = scal(Ytrans, mean(Ytrans));
+%Ytrans = scal(Ytrans, mean(Ytrans));
+Ytrans = bsxfun(@minus,Ytrans, mean(Ytrans));
 
 % minumum norm solution
 if doMinNorm
     disp('Generating minimum norm solution');
     [betaMinNorm, ~, lambdaMinNorm] = minimum_norm(stackedForwards, Y, nLambdaRidge);
+    
+    
+    %This code does the min-norm how mrCurrent does it, So you can compare
+    %betaComp with betaMinNorm to see if the results are comperable.
+    %this code is basically what's in minimm_norm() but wanted a
+    %doublecheck
+    [u,s,v] = csvd(stackedForwards)
+    lambda = gcv(u,s,Y,'Tikh',100)    
+    %Tikhonov regularized inverse matrix
+    reg_s = diag( s ./ (s.^2 + lambda^2 ));
+    sol = v * reg_s * u';
+    betaComp = sol*Y;
     lambdaMinNorm = lambdaMinNorm^2;
     rsquaredMinNorm = 1 - (norm(Y-stackedForwards*betaMinNorm, 'fro')^2/n) / ssTotal;
     if simulateData
