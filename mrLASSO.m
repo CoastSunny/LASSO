@@ -5,11 +5,12 @@ close all;
 addpath(genpath(pwd));
 
 % MAIN PARAMETERS
-numSubs = 2; % if left empty, use all subs
+numSubs = 10; % if left empty, use all subs
 doMinNorm = true;    % compute minimum norm or load in previous version?
 newSubs = false;      % subjects and ROIs used in original paper or new ones
 simulateData = true; % simulated or real data?
-projectDir = '~/Dropbox/ONGOING/LASSO/forward_data'; %'/Volumes/svndl/4D2/kohler/SYM_16GR/SOURCE';
+%projectDir = '~/Dropbox/ONGOING/LASSO/forward_data'; %'/Volumes/svndl/4D2/kohler/SYM_16GR/SOURCE';
+projectDir = '/Users/ales/Downloads/forward_data';
 condNmbr = 15; % which condition to plot, only relevant if new subs and real data
 
 if ~newSubs;
@@ -24,6 +25,7 @@ end
 
 % ADDITIONAL PARAMETERS?
 stackedForwards = [];
+allSubjForwards = {};
 ridgeSizes = zeros(1, numSubs);
 numComponents = 5;
 numCols = 2;
@@ -86,7 +88,7 @@ else
         fwdMatrix = structure.fwdMatrix;
         ridgeSizes(s) = numel(cat(2,roiIdx{s}{:})); % total ROI size by subject
         stackedForwards = blkdiag(stackedForwards, fwdMatrix(:,[roiIdx{s}{:}]));
-        
+        allSubjForwards{s} = fwdMatrix;
         % make Xlist and Vlist
         % get the first x principle components of the part of the fwdMatrix corresponding to each ROI
         xList{s} = cell(1,numROIs); vList{s} = cell(1,numROIs);
@@ -116,7 +118,7 @@ for s=1:numSubs
         end
         SNR = 0.1;
         initStrct = load([projectDir,'/Subject_48_initialization']);
-        [Y(128*(s-1)+1:128*s,:), ~, signal{s}, noise] = GenerateData(ROIs{s},idx,initStrct.VertConn,fwdMatrix,SNR, phase);
+        [Y(128*(s-1)+1:128*s,:), source{s}, signal{s}, noise] = GenerateData(ROIs{s},idx,initStrct.VertConn,allSubjForwards{s},SNR, phase);
     else
         subjId = subjectList{s};
         exportFolder = subfolders(fullfile(projectDir,subjId,'Exp_MATL_*'),1);
@@ -244,6 +246,7 @@ regionActivity = mean(regionActivity,3);
 
 
 %% MAKE FIGURE
+    
 close all
 leftIdx = cell2mat(arrayfun(@(x) ~isempty(strfind(ROIs{1}.name{x},'-L')), 1:length(ROIs{1}.name),'uni',false));
 fontSize = 12;
@@ -254,43 +257,65 @@ tempIdx = round(linspace(0,length(tempColors),length(find(leftIdx==1))+1));
 roiColors = tempColors(tempIdx(2:end),:);
 
 
+
 figH(1) = figure;
 subplot(2,1,1);
 hold on;
-p_h = cell2mat(arrayfun(@(x) ...
-    plot(regionActivityMinNorm(x,:)','color',roiColors(ceil((x)/2),:),'linewidth',2),...
-    find(leftIdx==1),'uni',false));
+selectedRois = find(leftIdx==1);
+
+selectedColors = roiColors(ceil((selectedRois)/2),:);
+set(gca, 'ColorOrder', selectedColors, 'NextPlot', 'replacechildren');
+
+plot(regionActivityMinNorm(selectedRois,:)','linewidth',2)
+
 xlim([0,size(regionActivityMinNorm,2)]);
-legend(p_h,ROIs{1}.name(leftIdx),'location','southeastoutside');
+legend(ROIs{1}.name(leftIdx),'location','southeastoutside');
 set(gca,gcaOpts{:})
 hold off;
+
 subplot(2,1,2);
 hold on;
-p_h = cell2mat(arrayfun(@(x) ...
-    plot(regionActivityMinNorm(x,:)','color',roiColors(ceil((x)/2),:),'linewidth',2),...
-    find(leftIdx==0),'uni',false));
+selectedRois = find(leftIdx==0); %Select left ROI responses
+
+selectedColors = roiColors(ceil((selectedRois)/2),:);
+set(gca, 'ColorOrder', selectedColors, 'NextPlot', 'replacechildren');
+
+plot(regionActivityMinNorm(selectedRois,:)','linewidth',2)
+
+
 xlim([0,size(regionActivityMinNorm,2)]);
-legend(p_h,ROIs{1}.name(~leftIdx),'location','southeastoutside');
+legend(ROIs{1}.name(~leftIdx),'location','southeastoutside');
 set(gca,gcaOpts{:})
 hold off;
+title('minNorm')
+
 figH(2) = figure;
 subplot(2,1,1);
 hold on;
-p_h = cell2mat(arrayfun(@(x) ...
-    plot(regionActivity(x,:)','color',roiColors(ceil((x)/2),:),'linewidth',2),...
-    find(leftIdx==1),'uni',false));
+selectedRois = find(leftIdx==1);
+
+selectedColors = roiColors(ceil((selectedRois)/2),:);
+set(gca, 'ColorOrder', selectedColors, 'NextPlot', 'replacechildren');
+
+plot(regionActivity(selectedRois,:)','linewidth',2)
+
 xlim([0,size(regionActivity,2)]);
-legend(p_h,ROIs{1}.name(leftIdx),'location','southeastoutside');
+legend(ROIs{1}.name(leftIdx),'location','southeastoutside');
 set(gca,gcaOpts{:})
 hold off;
 subplot(2,1,2);
 hold on;
-p_h = cell2mat(arrayfun(@(x) ...
-    plot(regionActivity(x,:)','color',roiColors(ceil((x)/2),:),'linewidth',2),...
-    find(leftIdx==0),'uni',false));xlim([0,size(regionActivity,2)]);
+selectedRois = find(leftIdx==0);
+
+selectedColors = roiColors(ceil((selectedRois)/2),:);
+set(gca, 'ColorOrder', selectedColors, 'NextPlot', 'replacechildren');
+
+plot(regionActivity(selectedRois,:)','linewidth',2)
+
 legend(ROIs{1}.name(~leftIdx),'location','southeastoutside');
 set(gca,gcaOpts{:})
 hold off; 
 pos = get(figH(1), 'Position');
 pos(3) = pos(3)*2; % Select the height of the figure in [cm]
 set(figH, 'Position', pos);
+title('lasso');
