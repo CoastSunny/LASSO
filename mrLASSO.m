@@ -9,7 +9,7 @@ numSubs = 2; % if left empty, use all subs
 doMinNorm = true;    % compute minimum norm or load in previous version?
 newSubs = false;      % subjects and ROIs used in original paper or new ones
 simulateData = true; % simulated or real data?
-projectDir = '/Users/ales/Downloads/forward_data';%'~/Dropbox/ONGOING/LASSO/forward_data'; %'/Volumes/svndl/4D2/kohler/SYM_16GR/SOURCE';
+projectDir = '~/Dropbox/ONGOING/LASSO/forward_data'; %'/Volumes/svndl/4D2/kohler/SYM_16GR/SOURCE';
 condNmbr = 15; % which condition to plot, only relevant if new subs and real data
 
 if ~newSubs;
@@ -157,12 +157,6 @@ stackedForwards = bsxfun(@minus,stackedForwards, mean(stackedForwards));
 n = numel(Y);
 ssTotal = norm(Y, 'fro')^2 / n;
 
-% use first 2 columns of v as time basis
-[~, ~, v] = svd(Y);
-Ytrans = Y * v(:, 1:numCols);
-%Ytrans = scal(Ytrans, mean(Ytrans));
-Ytrans = bsxfun(@minus,Ytrans, mean(Ytrans));
-
 % minumum norm solution
 if doMinNorm
     disp('Generating minimum norm solution');
@@ -173,8 +167,8 @@ if doMinNorm
     %betaComp with betaMinNorm to see if the results are comperable.
     %this code is basically what's in minimm_norm() but wanted a
     %doublecheck
-    [u,s,v] = csvd(stackedForwards)
-    lambda = gcv(u,s,Y,'Tikh',100)    
+    [u,s,v] = csvd(stackedForwards);
+    lambda = gcv(u,s,Y,'Tikh',100);  
     %Tikhonov regularized inverse matrix
     reg_s = diag( s ./ (s.^2 + lambda^2 ));
     sol = v * reg_s * u';
@@ -194,6 +188,13 @@ else
         load('~/Desktop/minNorm.mat');
     end
 end
+
+% use first 2 columns of v as time basis
+% PK: moved this down to avoid conflict with v generated above
+[~, ~, v] = svd(Y);
+Ytrans = Y * v(:, 1:numCols);
+%Ytrans = scal(Ytrans, mean(Ytrans));
+Ytrans = bsxfun(@minus,Ytrans, mean(Ytrans));
 
 % sequence of lambda values
 lambdaMax = max(cell2mat(arrayfun(@(x) norm(X(:,indices{x})'*Ytrans, 'fro')/penalties(x),1:numROIs,'uni',0)));
