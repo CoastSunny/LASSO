@@ -246,17 +246,51 @@ regionActivity = mean(regionActivity,3);
 %% MAKE FIGURE
 close all
 leftIdx = cell2mat(arrayfun(@(x) ~isempty(strfind(ROIs{1}.name{x},'-L')), 1:length(ROIs{1}.name),'uni',false));
-subplot(2,2,1);plot(regionActivityMinNorm(leftIdx,:)')
-xlim([0,size(regionActivity,2)*1.3]);
-subplot(2,2,2);plot(regionActivityMinNorm(~leftIdx,:)')
-xlim([0,size(regionActivity,2)*1.3]);
-subplot(2,2,3);plot(regionActivity(leftIdx,:)')
-xlim([0,size(regionActivity,2)*1.3]);
-legend(ROIs{1}.name(leftIdx),'location','southeast');
-subplot(2,2,4);plot(regionActivity(~leftIdx,:)')
-xlim([0,size(regionActivity,2)*1.3]);
-legend(ROIs{1}.name(~leftIdx),'location','southeast');
-pos = get(gcf, 'Position');
-pos(3) = pos(3)*2; % Select the height of the figure in [cm]
-set(gcf, 'Position', pos);
+fontSize = 12;
+gcaOpts = {'tickdir','out','box','off','fontsize',fontSize,'fontname','Arial','linewidth',1};
 
+tempColors = colormap(jet);
+tempIdx = round(linspace(0,length(tempColors),length(find(leftIdx==1))+1));
+roiColors = tempColors(tempIdx(2:end),:);
+
+
+figH(1) = figure;
+subplot(2,1,1);
+hold on;
+p_h = cell2mat(arrayfun(@(x) ...
+    plot(regionActivityMinNorm(x,:)','color',roiColors(ceil((x)/2),:),'linewidth',2),...
+    find(leftIdx==1),'uni',false));
+xlim([0,size(regionActivityMinNorm,2)]);
+legend(p_h,ROIs{1}.name(leftIdx),'location','southeastoutside');
+set(gca,gcaOpts{:})
+hold off;
+subplot(2,1,2);
+hold on;
+p_h = cell2mat(arrayfun(@(x) ...
+    plot(regionActivityMinNorm(x,:)','color',roiColors(ceil((x)/2),:),'linewidth',2),...
+    find(leftIdx==0),'uni',false));
+xlim([0,size(regionActivityMinNorm,2)]);
+legend(p_h,ROIs{1}.name(~leftIdx),'location','southeastoutside');
+set(gca,gcaOpts{:})
+hold off;
+figH(2) = figure;
+subplot(2,1,1);
+hold on;
+p_h = cell2mat(arrayfun(@(x) ...
+    plot(regionActivity(x,:)','color',roiColors(ceil((x)/2),:),'linewidth',2),...
+    find(leftIdx==1),'uni',false));
+xlim([0,size(regionActivity,2)]);
+legend(p_h,ROIs{1}.name(leftIdx),'location','southeastoutside');
+set(gca,gcaOpts{:})
+hold off;
+subplot(2,1,2);
+hold on;
+p_h = cell2mat(arrayfun(@(x) ...
+    plot(regionActivity(x,:)','color',roiColors(ceil((x)/2),:),'linewidth',2),...
+    find(leftIdx==0),'uni',false));xlim([0,size(regionActivity,2)]);
+legend(ROIs{1}.name(~leftIdx),'location','southeastoutside');
+set(gca,gcaOpts{:})
+hold off; 
+pos = get(figH(1), 'Position');
+pos(3) = pos(3)*2; % Select the height of the figure in [cm]
+set(figH, 'Position', pos);
