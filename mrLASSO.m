@@ -1,34 +1,44 @@
+%%
 clear all;
 close all;
 
-% ADD NECESSARY FUNCTIONS
-addpath(genpath(pwd));
+% Setup paths and directories
+myLocation = mfilename('fullpath');
+myDir = fileparts(myLocation);
+addpath(genpath(myDir));
+setpref('mrLASSO','scalpFileDir',fullfile(myDir,'datafiles','anatomy'));
+
 
 % MAIN PARAMETERS
 numSubs = 10; % if left empty, use all subs
-doMinNorm = true;    % compute minimum norm or load in previous version?
+doMinNorm = false;    % compute minimum norm or load in previous version?
 newSubs = false;      % subjects and ROIs used in original paper or new ones
-simulateData = true; % simulated or real data?
+simulateData = false; % simulated or real data?
+preselectSubjects = false; 
 %projectDir = '~/Dropbox/ONGOING/LASSO/forward_data'; %'/Volumes/svndl/4D2/kohler/SYM_16GR/SOURCE';
-projectDir = '/Users/ales/Downloads/forward_data';
-condNmbr = 15; % which condition to plot, only relevant if new subs and real data
-
-if ~newSubs;
-    if ~simulateData
-        error('You cannot run old subjects with real data');
-    else
-    end
-    condNmbr = [];
-else
-end
+%projectDir = '/Users/ales/Downloads/forward_data';
+projectDir = '/Users/ales/git/LASSO_svndl/mrcProj';
+forwardDir = '/Users/ales/Dropbox/eeg/forward_data';
+condNmbr = 8; % which condition to plot, only relevant if new subs and real data
+% 
+% if ~newSubs;
+%     if ~simulateData
+%         error('You cannot run old subjects with real data');
+%     else
+%     end
+%     condNmbr = [];
+% else
+% end
 
 
 % ADDITIONAL PARAMETERS?
 stackedForwards = [];
 allSubjForwards = {};
 ridgeSizes = zeros(1, numSubs);
-numComponents = 5;
-numCols = 2;
+numComponents = 3;
+numCols = 5;
+lowPassNF1 = true;
+
 nLambdaRidge = 50;
 nLambda = 30; % always end picking the max? (~120)
 alphaVal = 1.0817e4;
@@ -74,17 +84,34 @@ if newSubs
     end
     toc
 else
-    subjectList = [1,3,4,9,17,35,36,37,39,44,48,50,51,52,53,54,55,66,69,71,75,76,78,79,81];
+    if preselectSubjects
+        subjectList = [1,3,4,9,17,35,36,37,39,44,48,50,51,52,53,54,55,66,69,71,75,76,78,79,81];
+    else
+        dirList = dir(projectDir);
+        
+        dirNames = {dirList([dirList(:).isdir]).name};
+        dirNames = {dirNames{~strncmp('.',dirNames,1)}};
+        numSubs = length(dirNames);
+        
+        for iSubj=1:numSubs,
+            subjectList(iSubj) = str2num(dirNames{iSubj}(end-3:end));
+        end
+    end
+    
+%     numSubs = ;
+%     subjectList = subjectList(1:numSubs);
+%     dirNames = dirNames(1:numSubs);
+    
     if isempty(numSubs)
         numSubs = length(subjectList);
     else
     end
     for s=1:numSubs
-        structure = load([projectDir,'/ROI_correlation_many_subjects/ROI_correlation_subj_' num2str(subjectList(s))]);
+        structure = load([forwardDir,'/ROI_correlation_many_subjects/ROI_correlation_subj_' num2str(subjectList(s))]);
         ROIs{s} = structure.ROIs;
         roiIdx{s} = ROIs{s}.ndx;
         numROIs = length(roiIdx{1}); % all subjects should have same number of ROIs
-        structure = load([projectDir,'/forwardAndRois-skeri' num2str(subjectList(s))]);
+        structure = load([forwardDir,'/forwardAndRois-skeri' num2str(subjectList(s))]);
         fwdMatrix = structure.fwdMatrix;
         ridgeSizes(s) = numel(cat(2,roiIdx{s}{:})); % total ROI size by subject
         stackedForwards = blkdiag(stackedForwards, fwdMatrix(:,[roiIdx{s}{:}]));
@@ -96,7 +123,7 @@ else
     end
 end
 
-%% COMPUTE INVERSES
+%% COMPUTE INVERSES: Min NOrm
 % get number of subjects and conditions
 % (should be same for all subjects)
 for s=1:numSubs
@@ -120,11 +147,29 @@ for s=1:numSubs
         initStrct = load([projectDir,'/Subject_48_initialization']);
         [Y(128*(s-1)+1:128*s,:), source{s}, signal{s}, noise] = GenerateData(ROIs{s},idx,initStrct.VertConn,allSubjForwards{s},SNR, phase);
     else
-        subjId = subjectList{s};
+        subjId = dirNames{s};
         exportFolder = subfolders(fullfile(projectDir,subjId,'Exp_MATL_*'),1);
         exportFileList = subfiles(fullfile(exportFolder{1},'Axx_c*.mat'));
         Axx = load([exportFolder{1},'/',exportFileList{condNmbr}]);
+        
+        if lowPassNF1
+            num2keep = 5;
+            nf1 = Axx.i1F1;
+            axxIdx = (nf1:nf1:10*nf1)+1;
+            dftIdx = (1:10)+1;
+            dft = dftmtx(size(Axx.Wave,1));
+            sinWaveforms = imag(dft);
+            cosWaveforms = real(dft);
+            wave = cosWaveforms(:,dftIdx)*Axx.Cos(axxIdx,:)-sinWaveforms(:,dftIdx)*Axx.Sin(axxIdx,:);
+            Axx.Wave = wave;
+        end
+        
+        
+            
+        
         Y(size(Axx.Wave,2)*(s-1)+1:size(Axx.Wave,2)*s,:) = Axx.Wave';
+        
+        
     end
 end
 
@@ -145,24 +190,20 @@ indices = get_indices(grpSizes);
 penalties = get_group_penalties(X, indices);
 
 % center Y, X, stackedForwards
-%scal isn't a matlab builtin, changed to use bsxfun() --jma
-%Y = scal(Y, mean(Y));
-%X = scal(X, mean(X));
-
 Y = bsxfun(@minus,Y, mean(Y));
 X = bsxfun(@minus,X, mean(X));
-
-%changed to bsxfun --jma
-%stackedForwards = scal(stackedForwards, mean(stackedForwards));
 stackedForwards = bsxfun(@minus,stackedForwards, mean(stackedForwards));
 
 n = numel(Y);
-ssTotal = norm(Y, 'fro')^2 / n;
+[u1, s1, v1] = svd(Y);
+Ylo = u1(:,1:numCols)*s1(1:numCols,1:numCols)*v1(:, 1:numCols)';
+ssTotal = norm(Ylo, 'fro')^2 / n;
 
+%% DO min norm
 % minumum norm solution
 if doMinNorm
     disp('Generating minimum norm solution');
-    [betaMinNorm, ~, lambdaMinNorm] = minimum_norm(stackedForwards, Y, nLambdaRidge);
+    [betaMinNorm, ~, lambdaMinNorm] = minimum_norm(stackedForwards, Ylo, nLambdaRidge);
     
     
     %This code does the min-norm how mrCurrent does it, So you can compare
@@ -177,6 +218,8 @@ if doMinNorm
     betaComp = sol*Y;
     lambdaMinNorm = lambdaMinNorm^2;
     rsquaredMinNorm = 1 - (norm(Y-stackedForwards*betaMinNorm, 'fro')^2/n) / ssTotal;
+    YhatMN=stackedForwards*betaMinNorm;
+    
     if simulateData
         save('~/Desktop/sim_minNorm.mat','betaMinNorm','lambdaMinNorm','rsquaredMinNorm');
     else
@@ -191,10 +234,15 @@ else
     end
 end
 
+
+%% Group LASSO
 % use first 2 columns of v as time basis
 % PK: moved this down to avoid conflict with v generated above
+
+disp('Starting group LASSO');
 [~, ~, v] = svd(Y);
 Ytrans = Y * v(:, 1:numCols);
+
 %Ytrans = scal(Ytrans, mean(Ytrans));
 Ytrans = bsxfun(@minus,Ytrans, mean(Ytrans));
 
@@ -231,6 +279,7 @@ for i = 1:nLambda
     [gcvError(i), df(i)] = compute_gcv(rss, betaInit, betaOls, grpSizes, n);
 end
 [~, bestIndex] = min(gcvError);
+YhatLASSO = stackedForwards*betaVal{bestIndex}(indexer, :);
 
 % compute average of average metrics
 for s = 1:numSubs
@@ -241,22 +290,31 @@ for s = 1:numSubs
     regionActivityMinNorm(:,:,s) = cell2mat(arrayfun(@(x) mean(tempMinNorm(range(x)+1:range(x+1), :)),1:numROIs,'uni',false)');
     regionActivity(:,:,s) = cell2mat(arrayfun(@(x) mean(temp(range(x)+1:range(x+1), :)),1:numROIs,'uni',false)');
 end
+
+
 regionActivityMinNorm = mean(regionActivityMinNorm,3);
 regionActivity = mean(regionActivity,3);
 
+baselineIdx = 700:780;
+regionActivity = bsxfun(@minus,regionActivity,mean(regionActivity(:,baselineIdx),2));
+regionActivityMinNorm = bsxfun(@minus,regionActivityMinNorm,mean(regionActivityMinNorm(:,baselineIdx),2));
 
-%% MAKE FIGURE
+
+
+%% MAKE FIGURES
     
-close all
+
+%% Figure showing time courses from minimum-norm solution for every ROI
 leftIdx = cell2mat(arrayfun(@(x) ~isempty(strfind(ROIs{1}.name{x},'-L')), 1:length(ROIs{1}.name),'uni',false));
 fontSize = 12;
-gcaOpts = {'tickdir','out','box','off','fontsize',fontSize,'fontname','Arial','linewidth',1};
+gcaOpts = {'tickdir','out','box','off','fontsize',fontSize,'fontname','Arial',...
+    'linewidth',1,'YLim',[-2 2]*1e-4};
 
 tempColors = colormap(jet);
 tempIdx = round(linspace(0,length(tempColors),length(find(leftIdx==1))+1));
 roiColors = tempColors(tempIdx(2:end),:);
 
-
+t = 0:Axx.dTms:(Axx.nT-1)*Axx.dTms;
 
 figH(1) = figure;
 subplot(2,1,1);
@@ -266,12 +324,15 @@ selectedRois = find(leftIdx==1);
 selectedColors = roiColors(ceil((selectedRois)/2),:);
 set(gca, 'ColorOrder', selectedColors, 'NextPlot', 'replacechildren');
 
-plot(regionActivityMinNorm(selectedRois,:)','linewidth',2)
+plot(t,regionActivityMinNorm(selectedRois,:)','linewidth',2)
 
 xlim([0,size(regionActivityMinNorm,2)]);
 legend(ROIs{1}.name(leftIdx),'location','southeastoutside');
 set(gca,gcaOpts{:})
 hold off;
+title('Min Norm Solution - Left Hemisphere');
+xlabel('Time (ms)')
+ylabel('Current Source Density')
 
 subplot(2,1,2);
 hold on;
@@ -280,15 +341,18 @@ selectedRois = find(leftIdx==0); %Select left ROI responses
 selectedColors = roiColors(ceil((selectedRois)/2),:);
 set(gca, 'ColorOrder', selectedColors, 'NextPlot', 'replacechildren');
 
-plot(regionActivityMinNorm(selectedRois,:)','linewidth',2)
+plot(t,regionActivityMinNorm(selectedRois,:)','linewidth',2)
 
 
 xlim([0,size(regionActivityMinNorm,2)]);
 legend(ROIs{1}.name(~leftIdx),'location','southeastoutside');
 set(gca,gcaOpts{:})
 hold off;
-title('minNorm')
 
+title('Min Norm Solution - Right Hemisphere');
+xlabel('Time (ms)')
+ylabel('Current Source Density')
+%%
 figH(2) = figure;
 subplot(2,1,1);
 hold on;
@@ -297,12 +361,17 @@ selectedRois = find(leftIdx==1);
 selectedColors = roiColors(ceil((selectedRois)/2),:);
 set(gca, 'ColorOrder', selectedColors, 'NextPlot', 'replacechildren');
 
-plot(regionActivity(selectedRois,:)','linewidth',2)
+plot(t,regionActivity(selectedRois,:)','linewidth',2)
 
-xlim([0,size(regionActivity,2)]);
 legend(ROIs{1}.name(leftIdx),'location','southeastoutside');
 set(gca,gcaOpts{:})
 hold off;
+
+title('Group Lasso Solution - Left Hemisphere');
+xlabel('Time (ms)')
+ylabel('Current Source Density')
+
+
 subplot(2,1,2);
 hold on;
 selectedRois = find(leftIdx==0);
@@ -310,7 +379,7 @@ selectedRois = find(leftIdx==0);
 selectedColors = roiColors(ceil((selectedRois)/2),:);
 set(gca, 'ColorOrder', selectedColors, 'NextPlot', 'replacechildren');
 
-plot(regionActivity(selectedRois,:)','linewidth',2)
+plot(t,regionActivity(selectedRois,:)','linewidth',2)
 
 legend(ROIs{1}.name(~leftIdx),'location','southeastoutside');
 set(gca,gcaOpts{:})
@@ -318,4 +387,182 @@ hold off;
 pos = get(figH(1), 'Position');
 pos(3) = pos(3)*2; % Select the height of the figure in [cm]
 set(figH, 'Position', pos);
-title('lasso');
+title('Group Lasso Solution - Right Hemisphere');
+xlabel('Time (ms)')
+ylabel('Current Source Density')
+
+
+
+%% Plot each ROI in Subplot:
+
+%For plotting left hemisphere activation
+selectedRois = find(leftIdx==1);
+hemiName = 'left';
+
+%For plotting right hemisphere activation
+% selectedRois = find(leftIdx==0);
+% hemiName = 'right';
+
+hold on;
+scale = 1e3;
+
+gcaOpts = {'tickdir','out','box','off','fontsize',22,'fontname','Arial',...
+    'linewidth',3,'YLim',scale*[-2 2]*1e-4,'clipping','off','XLim',[0 1000],...
+    'ticklength',[0.0300 0.050]};
+
+
+%% Min Norm
+figH(1) = figure;
+clf;
+
+
+
+
+nRoi=length(selectedRois);
+for iRoi = 1:nRoi,
+    subplot(ceil(nRoi/2),2,iRoi);
+%    subplot(nRoi,1,iRoi);
+    hold on;
+    plot(t,scale*regionActivityMinNorm(selectedRois(iRoi),:)','k-','linewidth',3)
+
+    xlim([0,size(regionActivityMinNorm,2)]);    
+    set(gca,gcaOpts{:})
+    if iRoi == 1;
+        text(200,.1,[hemiName ' hemisphere'],'fontsize',20);
+        title({'Minimum Norm';'Separated waveforms'})
+    end
+   
+    if iRoi ~= nRoi,
+        set(gca,'xticklabel','','yticklabel','');
+        
+    end
+    thisRoiName =ROIs{1}.name{selectedRois(iRoi)};
+    thisRoiName = thisRoiName(1:end-2);
+    text(-320, 0,thisRoiName,'fontsize',22)
+    
+    axis on
+    hline = refline(0,0);
+    hline.Color = 'k';
+end
+
+
+%Set the figure position
+pos = [0 0 600 900];
+set(figH, 'Position', pos);
+
+
+%% Lasso
+figH(1) = figure;
+clf
+hold on;
+
+nRoi=length(selectedRois);
+for iRoi = 1:nRoi,
+    subplot(ceil(nRoi/2),2,iRoi);%  subplot(nRoi,1,iRoi);
+    hold on;
+    plot(t,scale*regionActivity(selectedRois(iRoi),:)','k-','linewidth',3)
+
+    xlim([0,size(regionActivity,2)]);    
+    set(gca,gcaOpts{:})
+    if iRoi == 1;
+        text(200,.1,[hemiName ' hemisphere'],'fontsize',20);
+        title({'Group Lasso';'Separated waveforms'})
+    end
+   
+    if iRoi ~= nRoi,
+        set(gca,'xticklabel','','yticklabel','');
+        
+    end
+    thisRoiName =ROIs{1}.name{selectedRois(iRoi)};
+    thisRoiName = thisRoiName(1:end-2);
+    text(-320, 0,thisRoiName,'fontsize',22)
+    
+    axis on
+    hline = refline(0,0);
+    hline.Color = 'k';
+end
+
+%Set the figure position
+pos = [600 0 600 900];
+set(figH, 'Position', pos);
+
+%% Create topographies from each participant.
+
+iT = 196;
+
+pos =  [80   300   362   490]
+unstacked = reshape(Y,128,9,780);
+nSubj = size(unstacked,2);
+for iSubj = 1:nSubj,
+    figure(200+iSubj);
+    clf
+    %plotOnEgi(unstacked(:,iSubj,iT));
+    plotContourOnScalp(unstacked(:,iSubj,iT),'skeri0044',projectDir)
+    view(20,35)
+    camproj('perspective')
+    axis off
+    set(gcf,'position',pos);
+    name = ['prettyScalp_subj_' num2str(iSubj) '_time_' num2str(round(iT*Axx.dTms))];
+end
+
+%% Topo Reconstructions
+
+iT = 196;
+pos =  [80   300   362   490]
+unstackedData = reshape(Ylo,128,9,780);
+unstackedYhatMN = reshape(YhatMN,128,9,780);
+unstackedYhatLASSO = reshape(YhatLASSO,128,9,780);
+
+nSubj = size(unstacked,2);
+for iSubj = 1:nSubj,
+    thisSubj = dirNames{iSubj};
+    figure(300+iSubj);
+    clf
+    %plotOnEgi(unstacked(:,iSubj,iT));
+    plotContourOnScalp(unstackedData(:,iSubj,iT),thisSubj,projectDir)
+    view(20,35)
+    camproj('perspective')
+    axis off
+    set(gcf,'position',pos);
+    
+    figure(400+iSubj);
+    clf
+    %plotOnEgi(unstacked(:,iSubj,iT));
+    plotContourOnScalp(unstackedYhatLASSO(:,iSubj,iT),thisSubj,projectDir)
+    view(20,35)
+    camproj('perspective')
+    axis off
+    set(gcf,'position',pos+[362 0 0 0]);
+    
+    figure(500+iSubj);
+    clf
+    %plotOnEgi(unstacked(:,iSubj,iT));
+    plotContourOnScalp(unstackedYhatMN(:,iSubj,iT),thisSubj,projectDir)
+    view(20,35)
+    camproj('perspective')
+    axis off
+    set(gcf,'position',pos+2*[362 0 0 0]);
+pause;
+end
+
+%%
+id=1;
+idList=[1 2 3 4 6 8 9];
+fFull =[];
+for id = idList,
+    
+for i=1:3,
+
+    h=figure((i+2)*100+id);
+    
+     %name = ['compo' num2str(iSubj) '_time_' num2str(round(iT*Axx.dTms))];     
+    %saveas(gcf,name,'png');
+    f(i) = getframe(h,[90 100 190 300]);
+end
+fCat = cat(1,f(1).cdata,f(2).cdata,f(3).cdata);
+
+fFull = [fFull fCat];
+end
+
+
+

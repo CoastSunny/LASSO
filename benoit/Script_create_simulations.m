@@ -18,7 +18,7 @@ idx = [ROIs.ndx{1:14}];
 
 % Then, you can compute the minimum-norm (L2 solution) using: 
 
-J_MN = minimum_norm( EEG_fwd(:,idx), Y );
+J_MN = minimum_norm( EEG_fwd(:,idx), Y,NUM_OF_LAMBDA );
 
 % and the minimum-norm with FACE using the ROIs structure and: 
 % 
