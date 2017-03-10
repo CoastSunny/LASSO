@@ -2,6 +2,29 @@
 clear all;
 close all;
 
+msgTxt = {'This script implements fMRI ROI informed group constrained source localization',...
+    '1) Compute minimum-norm inverse solution',...
+    '2) Compute the Group LASSO inverse solution',...
+    '3) Plot waveforms from ROI',...
+    '4) Plot topographies',...
+    'Press OK to continue'};
+
+uiwait(msgbox(msgTxt,'Information','modal'));
+ 
+
+% Construct a questdlg with three options
+choice = questdlg(['Would you like to Recalculate the minimum norm inverse solution?'...
+    ' This calculuation may take 20 minutes'], ...
+    'Calculate MinNorm Inverse?',...
+    'Recalculate Inverse Solution', ...
+    'Use Precalculated Inverse Solution','Use Precalculated Inverse Solution');
+switch choice
+    case 'Recalculate Inverse Solution', 
+        doMinNorm = true;
+    case 'Use Precalculated Inverse Solution',
+        doMinNorm = false;
+end
+
 % Setup paths and directories
 myLocation = mfilename('fullpath');
 myDir = fileparts(myLocation);
@@ -11,25 +34,13 @@ setpref('mrLASSO','scalpFileDir',fullfile(myDir,'datafiles','anatomy'));
 
 % MAIN PARAMETERS
 numSubs = 10; % if left empty, use all subs
-doMinNorm = false;    % compute minimum norm or load in previous version?
-newSubs = false;      % subjects and ROIs used in original paper or new ones
 simulateData = false; % simulated or real data?
 preselectSubjects = false; 
 %projectDir = '~/Dropbox/ONGOING/LASSO/forward_data'; %'/Volumes/svndl/4D2/kohler/SYM_16GR/SOURCE';
 %projectDir = '/Users/ales/Downloads/forward_data';
-projectDir = '/Users/ales/git/LASSO_svndl/mrcProj';
-forwardDir = '/Users/ales/Dropbox/eeg/forward_data';
-condNmbr = 8; % which condition to plot, only relevant if new subs and real data
-% 
-% if ~newSubs;
-%     if ~simulateData
-%         error('You cannot run old subjects with real data');
-%     else
-%     end
-%     condNmbr = [];
-% else
-% end
-
+projectDir = fullfile(myDir,'datafiles','eegdata');
+forwardDir = fullfile(myDir,'datafiles','forwardSolutions');
+condNmbr = 8; % which condition to plot,
 
 % ADDITIONAL PARAMETERS?
 stackedForwards = [];
@@ -45,59 +56,17 @@ alphaVal = 1.0817e4;
 MAX_ITER = 1e6;
 
 %% GET ROIs AND EXCLUDE MISSING
-if newSubs
-    tic
-    subjectList = subfolders([projectDir,'/*']);
-    if isempty(numSubs)
-        numSubs = length(subjectList);
-    else
-    end
-    for s=1:numSubs
-        ROIs{s} = sl_roiMtx(subjectList{s});
-        if s==1
-            numROIs = size(ROIs{s}.ndx,2);
-            roiNames = ROIs{s}.name;
-        else
-        end
-        roiIdx{s} = ROIs{s}.ndx;
-        nanROIs(s,:) = cell2mat(arrayfun(@(x) ~isempty(roiIdx{s}{x}),1:numROIs,'uni',0));
-    end
-    numROIs = length(find(sum(nanROIs,1)>=numSubs));
-    roiIdx = arrayfun(@(x) roiIdx{x}(sum(nanROIs,1)>=numSubs),1:numSubs,'uni',0); % modify roiIdx
-    
-    for s=1:numSubs
-        ROIs{s}.ndx = ROIs{s}.ndx(sum(nanROIs,1)>=numSubs); % modify ROIs
-        ROIs{s}.corr = ROIs{s}.corr(sum(nanROIs,1)>=numSubs);
-        ROIs{s}.name = ROIs{s}.name(sum(nanROIs,1)>=numSubs);
-    end
-    
-    %% MAKE FORWARD MATRIX, XLIST AND VLIST
-    for s=1:numSubs
-        fwdMatrix = sl_getFwd(projectDir,subjectList{s});
-        ridgeSizes(s) = numel(cat(2,roiIdx{s}{:})); % total ROI size by subject
-        stackedForwards = blkdiag(stackedForwards, fwdMatrix(:,[roiIdx{s}{:}]));
-        
-        % make Xlist and Vlist
-        % get the first x principle components of the part of the fwdMatrix corresponding to each ROI
-        xList{s} = cell(1,numROIs); vList{s} = cell(1,numROIs);
-        [xList{s}(:),vList{s}(:)] = arrayfun(@(x) get_principal_components(fwdMatrix(:, roiIdx{s}{x}),numComponents),1:numROIs,'uni',0);
-    end
-    toc
-else
-    if preselectSubjects
-        subjectList = [1,3,4,9,17,35,36,37,39,44,48,50,51,52,53,54,55,66,69,71,75,76,78,79,81];
-    else
-        dirList = dir(projectDir);
-        
-        dirNames = {dirList([dirList(:).isdir]).name};
-        dirNames = {dirNames{~strncmp('.',dirNames,1)}};
-        numSubs = length(dirNames);
-        
-        for iSubj=1:numSubs,
-            subjectList(iSubj) = str2num(dirNames{iSubj}(end-3:end));
-        end
-    end
-    
+
+dirList = dir(projectDir);
+
+dirNames = {dirList([dirList(:).isdir]).name};
+dirNames = {dirNames{~strncmp('.',dirNames,1)}};
+numSubs = length(dirNames);
+
+for iSubj=1:numSubs,
+    subjectList(iSubj) = str2num(dirNames{iSubj}(end-3:end));
+end
+
 %     numSubs = ;
 %     subjectList = subjectList(1:numSubs);
 %     dirNames = dirNames(1:numSubs);
@@ -107,11 +76,14 @@ else
     else
     end
     for s=1:numSubs
-        structure = load([forwardDir,'/ROI_correlation_many_subjects/ROI_correlation_subj_' num2str(subjectList(s))]);
+        roiFile = fullfile(forwardDir,'ROI_correlation_many_subjects',...
+            ['ROI_correlation_subj_' num2str(subjectList(s))]);
+        structure = load(roiFile);
         ROIs{s} = structure.ROIs;
         roiIdx{s} = ROIs{s}.ndx;
         numROIs = length(roiIdx{1}); % all subjects should have same number of ROIs
-        structure = load([forwardDir,'/forwardAndRois-skeri' num2str(subjectList(s))]);
+        fwdFile = fullfile(forwardDir,['forwardAndRois-skeri' num2str(subjectList(s))]);
+        structure = load(fwdFile);
         fwdMatrix = structure.fwdMatrix;
         ridgeSizes(s) = numel(cat(2,roiIdx{s}{:})); % total ROI size by subject
         stackedForwards = blkdiag(stackedForwards, fwdMatrix(:,[roiIdx{s}{:}]));
@@ -121,7 +93,7 @@ else
         xList{s} = cell(1,numROIs); vList{s} = cell(1,numROIs);
         [xList{s}(:),vList{s}(:)] = arrayfun(@(x) get_principal_components(fwdMatrix(:, roiIdx{s}{x}),numComponents),1:numROIs,'uni',0);
     end
-end
+
 
 %% COMPUTE INVERSES: Min NOrm
 % get number of subjects and conditions
@@ -144,7 +116,9 @@ for s=1:numSubs
         else
         end
         SNR = 0.1;
-        initStrct = load([projectDir,'/Subject_48_initialization']);
+        initFile = fullfile(forwardDir,'Subject_48_initialization');
+        initStrct = load(initFile);
+        
         [Y(128*(s-1)+1:128*s,:), source{s}, signal{s}, noise] = GenerateData(ROIs{s},idx,initStrct.VertConn,allSubjForwards{s},SNR, phase);
     else
         subjId = dirNames{s};
@@ -303,6 +277,9 @@ regionActivityMinNorm = bsxfun(@minus,regionActivityMinNorm,mean(regionActivityM
 
 %% MAKE FIGURES
     
+msgTxt = 'Inverse solutions completed. Plotting waveforms from ROIs';
+
+disp(msgTxt)
 
 %% Figure showing time courses from minimum-norm solution for every ROI
 leftIdx = cell2mat(arrayfun(@(x) ~isempty(strfind(ROIs{1}.name{x},'-L')), 1:length(ROIs{1}.name),'uni',false));
@@ -395,6 +372,10 @@ ylabel('Current Source Density')
 
 %% Plot each ROI in Subplot:
 
+msgTxt = 'Plotting waveforms from ROIs in separate subplots';
+disp(msgTxt)
+
+
 %For plotting left hemisphere activation
 selectedRois = find(leftIdx==1);
 hemiName = 'left';
@@ -413,7 +394,6 @@ gcaOpts = {'tickdir','out','box','off','fontsize',22,'fontname','Arial',...
 
 %% Min Norm
 figH(1) = figure;
-clf;
 
 
 
@@ -453,7 +433,6 @@ set(figH, 'Position', pos);
 
 %% Lasso
 figH(1) = figure;
-clf
 hold on;
 
 nRoi=length(selectedRois);
@@ -486,37 +465,24 @@ end
 pos = [600 0 600 900];
 set(figH, 'Position', pos);
 
-%% Create topographies from each participant.
 
-iT = 196;
-
-pos =  [80   300   362   490]
-unstacked = reshape(Y,128,9,780);
-nSubj = size(unstacked,2);
-for iSubj = 1:nSubj,
-    figure(200+iSubj);
-    clf
-    %plotOnEgi(unstacked(:,iSubj,iT));
-    plotContourOnScalp(unstacked(:,iSubj,iT),'skeri0044',projectDir)
-    view(20,35)
-    camproj('perspective')
-    axis off
-    set(gcf,'position',pos);
-    name = ['prettyScalp_subj_' num2str(iSubj) '_time_' num2str(round(iT*Axx.dTms))];
-end
 
 %% Topo Reconstructions
 
-iT = 196;
-pos =  [80   300   362   490]
+msgtxt = [ 'The next plots show each participant one at a time.'];
+disp(msgtxt);
+
+%Reduced dimension data (Ylo) that we fit.
 unstackedData = reshape(Ylo,128,9,780);
+%MinNorm Solution
 unstackedYhatMN = reshape(YhatMN,128,9,780);
+%LASSO Solution
 unstackedYhatLASSO = reshape(YhatLASSO,128,9,780);
 
 nSubj = size(unstacked,2);
 for iSubj = 1:nSubj,
     thisSubj = dirNames{iSubj};
-    figure(300+iSubj);
+    figure(300);
     clf
     %plotOnEgi(unstacked(:,iSubj,iT));
     plotContourOnScalp(unstackedData(:,iSubj,iT),thisSubj,projectDir)
@@ -524,45 +490,53 @@ for iSubj = 1:nSubj,
     camproj('perspective')
     axis off
     set(gcf,'position',pos);
+    title({'Data';['Participant: ' thisSubj]})
     
-    figure(400+iSubj);
-    clf
-    %plotOnEgi(unstacked(:,iSubj,iT));
-    plotContourOnScalp(unstackedYhatLASSO(:,iSubj,iT),thisSubj,projectDir)
-    view(20,35)
-    camproj('perspective')
-    axis off
-    set(gcf,'position',pos+[362 0 0 0]);
-    
-    figure(500+iSubj);
+    figure(400);
     clf
     %plotOnEgi(unstacked(:,iSubj,iT));
     plotContourOnScalp(unstackedYhatMN(:,iSubj,iT),thisSubj,projectDir)
     view(20,35)
     camproj('perspective')
     axis off
+    set(gcf,'position',pos+[362 0 0 0]);
+    title({'Minimum-Norm Fit';['Participant: ' thisSubj]})
+    
+    figure(500);
+    clf
+    %plotOnEgi(unstacked(:,iSubj,iT));
+    plotContourOnScalp(unstackedYhatLASSO(:,iSubj,iT),thisSubj,projectDir)
+    view(20,35)
+    camproj('perspective')
+    axis off
     set(gcf,'position',pos+2*[362 0 0 0]);
-pause;
+    title({'Group LASSO fit';['Participant: ' thisSubj]})
+    uiwait(warndlg('Press OK for next participant', 'Information','modal'));
 end
 
 %%
-id=1;
-idList=[1 2 3 4 6 8 9];
-fFull =[];
-for id = idList,
-    
-for i=1:3,
 
-    h=figure((i+2)*100+id);
-    
-     %name = ['compo' num2str(iSubj) '_time_' num2str(round(iT*Axx.dTms))];     
-    %saveas(gcf,name,'png');
-    f(i) = getframe(h,[90 100 190 300]);
-end
-fCat = cat(1,f(1).cdata,f(2).cdata,f(3).cdata);
+%% Create data topographies from each participant.
 
-fFull = [fFull fCat];
-end
+%The dimensionality reduced data is fit in the main algorithm.  Uncomment
+%the code below to show topographies for the full dimension data.
 
+%Time index to plot. 196th sample = 251.3 ms.
+% iT = 196;
+% 
+% pos =  [80   300   362   490]
+% unstacked = reshape(Y,128,9,780);
+% nSubj = size(unstacked,2);
+% for iSubj = 1:nSubj,
+%     figure(200+iSubj);
+%     clf
+%     %plotOnEgi(unstacked(:,iSubj,iT));
+%     plotContourOnScalp(unstacked(:,iSubj,iT),'skeri0044',projectDir)
+%     view(20,35)
+%     camproj('perspective')
+%     axis off
+%     set(gcf,'position',pos);
+%     name = ['prettyScalp_subj_' num2str(iSubj) '_time_' num2str(round(iT*Axx.dTms))];
+% end
 
 
