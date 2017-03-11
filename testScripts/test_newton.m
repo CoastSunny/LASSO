@@ -16,6 +16,7 @@ G_small = 14;
 idx = 1:14;
 ndx_areas = [3 5];
 noise_level = 0;
+phase = pi/2;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 ROIs.Tess_ndx = ROIs.Tess_ndx(idx);
@@ -25,9 +26,9 @@ ROIs.corr = ROIs.corr(idx);
 % end
 ROIs.name = ROIs.name(idx);
 ROIs.ndx = ROIs.ndx(idx);
-[Y, signal, data, strength] = GenerateData(ROIs, ndx_areas, VertConn, EEG_fwd, noise_level);
+[Y, signal, data, strength] = GenerateData(ROIs, ndx_areas, VertConn, EEG_fwd, noise_level,phase);
 Y = Y(:,1);
-
+signal = signal';
 
 G = numel(idx);
 
@@ -209,14 +210,15 @@ YMAX = max(max(mag));
 % axis([0 1 0 YMAX]);
 Script_create_simulations;
 % hold;
-% %plot([dev(1) dev(end)],[norm(J_MN) norm(J_MN)],'LineWidth',2,'Color','black');
-% legend(ROIs.name(a),'Location','Best');
-% text(repmat(dev(end),numel(a),1), mag(end,a), ROIs.name(a), 'FontSize',12);
-% xlabel('Variance explained');
-% ylabel('Coefficient norm');
-% title('Group');grid
-% 
-% figure;
+figure
+plot([dev(1) dev(end)],[norm(J_MN) norm(J_MN)],'LineWidth',2,'Color','black');
+legend(ROIs.name(a),'Location','Best');
+text(repmat(dev(end),numel(a),1), mag(end,a), ROIs.name(a), 'FontSize',12);
+xlabel('Variance explained');
+ylabel('Coefficient norm');
+title('Group');grid
+
+figure;
 plot(dev,result,'LineWidth',2);
 axis([0 1 0 1]);
 hold
@@ -227,9 +229,9 @@ legend('AUC','Relative energy','AUC MN','Relative energy MN','Location','Best');
 title('Performance measures');
 grid
 
-%write Y to file
-fid = fopen('Y.txt', 'w');
-for i = 1:numel(Y)
-    fprintf(fid, '%f\n', Y(i));
-end
-fclose(fid);
+% %write Y to file
+% fid = fopen('Y.txt', 'w');
+% for i = 1:numel(Y)
+%     fprintf(fid, '%f\n', Y(i));
+% end
+% fclose(fid);
