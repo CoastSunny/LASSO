@@ -29,6 +29,14 @@ end
 myLocation = mfilename('fullpath');
 myDir = fileparts(myLocation);
 addpath(genpath(myDir));
+
+datafileDir = fullfile(myDir,'datafiles');
+if ~exist(datafileDir,'dir')
+    uiwait(msgbox('Could not find datafile directory, please select it','Information','modal'));
+    datafileDir = uigetdir(myDir,'Pick directory containing data')
+end
+
+
 setpref('mrLASSO','scalpFileDir',fullfile(myDir,'datafiles','anatomy'));
 
 
@@ -38,8 +46,8 @@ simulateData = false; % simulated or real data?
 preselectSubjects = false; 
 %projectDir = '~/Dropbox/ONGOING/LASSO/forward_data'; %'/Volumes/svndl/4D2/kohler/SYM_16GR/SOURCE';
 %projectDir = '/Users/ales/Downloads/forward_data';
-projectDir = fullfile(myDir,'datafiles','eegdata');
-forwardDir = fullfile(myDir,'datafiles','forwardSolutions');
+projectDir = fullfile(datafileDir,'eegdata');
+forwardDir = fullfile(datafileDir,'forwardSolutions');
 condNmbr = 8; % which condition to plot,
 
 % ADDITIONAL PARAMETERS?
@@ -194,7 +202,7 @@ if doMinNorm
     rsquaredMinNorm = 1 - (norm(Y-stackedForwards*betaMinNorm, 'fro')^2/n) / ssTotal;
     YhatMN=stackedForwards*betaMinNorm;
     
-    saveDir = fullfile(myDir,'datafiles');
+    saveDir = datafileDir;
     
     if simulateData
         save(fullfile(saveDir,'simulation_precalculatedMinNorm.mat'),'betaMinNorm','lambdaMinNorm','rsquaredMinNorm','YhatMN');
@@ -203,6 +211,8 @@ if doMinNorm
     end
 else
     disp('Loading minimum norm solution');
+      saveDir = datafileDir;
+    
     if simulateData
         load(fullfile(saveDir,'simulation_precalculatedMinNorm.mat'));
     else
