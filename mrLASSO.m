@@ -194,17 +194,19 @@ if doMinNorm
     rsquaredMinNorm = 1 - (norm(Y-stackedForwards*betaMinNorm, 'fro')^2/n) / ssTotal;
     YhatMN=stackedForwards*betaMinNorm;
     
+    saveDir = fullfile(myDir,'datafiles');
+    
     if simulateData
-        save('~/Desktop/sim_minNorm.mat','betaMinNorm','lambdaMinNorm','rsquaredMinNorm');
+        save(fullfile(saveDir,'simulation_precalculatedMinNorm.mat'),'betaMinNorm','lambdaMinNorm','rsquaredMinNorm','YhatMN');
     else
-        save('~/Desktop/minNorm.mat','betaMinNorm','lambdaMinNorm','rsquaredMinNorm');
+        save(fullfile(saveDir,'precalculatedMinNorm.mat'),'betaMinNorm','lambdaMinNorm','rsquaredMinNorm','YhatMN');
     end
 else
     disp('Loading minimum norm solution');
     if simulateData
-        load('~/Desktop/sim_minNorm.mat');
+        load(fullfile(saveDir,'simulation_precalculatedMinNorm.mat'));
     else
-        load('~/Desktop/minNorm.mat');
+        load(fullfile(saveDir,'precalculatedMinNorm.mat'));
     end
 end
 
@@ -472,6 +474,34 @@ set(figH, 'Position', pos);
 msgtxt = [ 'The next plots show each participant one at a time.'];
 disp(msgtxt);
 
+% Construct a questdlg with three options
+plotChoice = questdlg(['Would you like to plot topographies?'...
+    'The figures are somewhat slow to render'], ...
+    'Plot Topographies?',...
+    'Yes', ...
+    'No','Yes');
+switch plotChoice
+    case 'Yes',
+        
+        nSubj = size(unstackedData,2);
+        
+        numChoice = questdlg(['How many participants to plot?'], ...
+            'Plot Topographies?',...
+            'Single', ...
+            'All','Single');
+        switch numChoice
+            case 'Single'
+                subjList = 6;
+            case 'All'
+                subjList = 1:nSubj;
+        end
+            
+            %Time index to plot. 196th sample = 251.3 ms.
+iT = 196;
+
+%Set a default position for the plots
+pos =  [80   300   362   490];
+
 %Reduced dimension data (Ylo) that we fit.
 unstackedData = reshape(Ylo,128,9,780);
 %MinNorm Solution
@@ -479,10 +509,10 @@ unstackedYhatMN = reshape(YhatMN,128,9,780);
 %LASSO Solution
 unstackedYhatLASSO = reshape(YhatLASSO,128,9,780);
 
-nSubj = size(unstacked,2);
-for iSubj = 1:nSubj,
+nSubj = size(unstackedData,2);
+for iSubj = subjList,
     thisSubj = dirNames{iSubj};
-    figure(300);
+    figure(300+iSubj);
     clf
     %plotOnEgi(unstacked(:,iSubj,iT));
     plotContourOnScalp(unstackedData(:,iSubj,iT),thisSubj,projectDir)
@@ -492,7 +522,7 @@ for iSubj = 1:nSubj,
     set(gcf,'position',pos);
     title({'Data';['Participant: ' thisSubj]})
     
-    figure(400);
+    figure(400+iSubj);
     clf
     %plotOnEgi(unstacked(:,iSubj,iT));
     plotContourOnScalp(unstackedYhatMN(:,iSubj,iT),thisSubj,projectDir)
@@ -502,7 +532,7 @@ for iSubj = 1:nSubj,
     set(gcf,'position',pos+[362 0 0 0]);
     title({'Minimum-Norm Fit';['Participant: ' thisSubj]})
     
-    figure(500);
+    figure(500+iSubj);
     clf
     %plotOnEgi(unstacked(:,iSubj,iT));
     plotContourOnScalp(unstackedYhatLASSO(:,iSubj,iT),thisSubj,projectDir)
@@ -511,9 +541,12 @@ for iSubj = 1:nSubj,
     axis off
     set(gcf,'position',pos+2*[362 0 0 0]);
     title({'Group LASSO fit';['Participant: ' thisSubj]})
-    uiwait(warndlg('Press OK for next participant', 'Information','modal'));
+  
 end
 
+    case 'No',
+        
+end
 %%
 
 %% Create data topographies from each participant.
