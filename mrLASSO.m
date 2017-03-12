@@ -37,7 +37,7 @@ if ~exist(datafileDir,'dir')
 end
 
 
-setpref('mrLASSO','scalpFileDir',fullfile(myDir,'datafiles','anatomy'));
+setpref('mrLASSO','scalpFileDir',fullfile(datafileDir,'anatomy'));
 
 
 % MAIN PARAMETERS
@@ -382,9 +382,10 @@ ylabel('Current Source Density')
 
 
 
-%% Plot each ROI in Subplot:
+%% Make Figure 9: 
+%Plot each ROI in Subplot:
 
-msgTxt = 'Plotting waveforms from ROIs in separate subplots';
+msgTxt = 'Recreating Figure 9: Plotting waveforms from ROIs in separate subplots';
 disp(msgTxt)
 
 
@@ -410,13 +411,23 @@ figH(1) = figure;
 
 
 
+
 nRoi=length(selectedRois);
 for iRoi = 1:nRoi,
     subplot(ceil(nRoi/2),2,iRoi);
 %    subplot(nRoi,1,iRoi);
     hold on;
+    
+    %For plotting left hemisphere activation
+    selectedRois = find(leftIdx==1);
+    %hemiName = 'left';
     plot(t,scale*regionActivityMinNorm(selectedRois(iRoi),:)','k-','linewidth',3)
 
+    %For plotting right hemisphere activation
+    selectedRois = find(leftIdx==0);
+    % hemiName = 'right';
+    plot(t,scale*regionActivityMinNorm(selectedRois(iRoi),:)','k:','linewidth',3)
+    
     xlim([0,size(regionActivityMinNorm,2)]);    
     set(gca,gcaOpts{:})
     if iRoi == 1;
@@ -451,8 +462,17 @@ nRoi=length(selectedRois);
 for iRoi = 1:nRoi,
     subplot(ceil(nRoi/2),2,iRoi);%  subplot(nRoi,1,iRoi);
     hold on;
-    plot(t,scale*regionActivity(selectedRois(iRoi),:)','k-','linewidth',3)
-
+    
+    %For plotting left hemisphere activation
+    selectedRois = find(leftIdx==1);
+    % hemiName = 'Left';
+    plot(t,scale*regionActivityMinNorm(selectedRois(iRoi),:)','k-','linewidth',3)
+    
+    %For plotting right hemisphere activation
+    selectedRois = find(leftIdx==0);
+    % hemiName = 'right';
+    plot(t,scale*regionActivityMinNorm(selectedRois(iRoi),:)','k:','linewidth',3)
+    
     xlim([0,size(regionActivity,2)]);    
     set(gca,gcaOpts{:})
     if iRoi == 1;
@@ -481,6 +501,11 @@ set(figH, 'Position', pos);
 
 %% Topo Reconstructions
 
+%Because the topographies are overlayed on high-resolution scalps
+%in order to plot lots of them without performance degradation we plot one
+%at a time and take a snapshot of the figure before destroying the figure
+%and rendering a new scalp.  For 3D view render a single participant
+
 msgtxt = [ 'The next plots show each participant one at a time.'];
 disp(msgtxt);
 
@@ -494,16 +519,26 @@ switch plotChoice
     case 'Yes',
         
         nSubj = size(unstackedData,2);
-        
-        numChoice = questdlg(['How many participants to plot?'], ...
+        %Reduced dimension data (Ylo) that we fit.
+        unstackedData = reshape(Ylo,128,9,780);
+        %MinNorm Solution
+        unstackedYhatMN = reshape(YhatMN,128,9,780);
+        %LASSO Solution
+        unstackedYhatLASSO = reshape(YhatLASSO,128,9,780);
+
+        numChoice = questdlg({'How many participants to plot?';...
+            '1) Single is a 3D rotatable render'; ...
+            '2) All is a snapshot of all scalps on one figure'},...
             'Plot Topographies?',...
             'Single', ...
             'All','Single');
         switch numChoice
             case 'Single'
                 subjList = 6;
+                closeTopoFigs = false;
             case 'All'
                 subjList = 1:nSubj;
+                closeTopoFigs = true;
         end
             
             %Time index to plot. 196th sample = 251.3 ms.
@@ -512,17 +547,17 @@ iT = 196;
 %Set a default position for the plots
 pos =  [80   300   362   490];
 
-%Reduced dimension data (Ylo) that we fit.
-unstackedData = reshape(Ylo,128,9,780);
-%MinNorm Solution
-unstackedYhatMN = reshape(YhatMN,128,9,780);
-%LASSO Solution
-unstackedYhatLASSO = reshape(YhatLASSO,128,9,780);
 
-nSubj = size(unstackedData,2);
+%Create Matrices to save views of topographies.
+%Basically we take snapshots of each render and concatenate them into an
+%image matrix. 
+allDataTopos =[];%Data
+allMNTopos   =[];%Minimum norm
+allGLTopos   =[];%Group Lasso
+
 for iSubj = subjList,
     thisSubj = dirNames{iSubj};
-    figure(300+iSubj);
+    figH= figure(300+iSubj);
     clf
     %plotOnEgi(unstacked(:,iSubj,iT));
     plotContourOnScalp(unstackedData(:,iSubj,iT),thisSubj,projectDir)
@@ -530,19 +565,45 @@ for iSubj = subjList,
     camproj('perspective')
     axis off
     set(gcf,'position',pos);
-    title({'Data';['Participant: ' thisSubj]})
+   
+    thisFrame = getframe(figH,[90 100 190 300]);
+   
+    allDataTopos = [allDataTopos thisFrame.cdata];
     
-    figure(400+iSubj);
+    
+    %if rendering multiple topos close ones we don't need. 
+    if closeTopoFigs
+        close(figH);
+    else
+        title({'Data';['Participant: ' thisSubj]})
+    end
+    
+    
+    figH=figure(400+iSubj);
     clf
     %plotOnEgi(unstacked(:,iSubj,iT));
-    plotContourOnScalp(unstackedYhatMN(:,iSubj,iT),thisSubj,projectDir)
+    plotContourOnScalp(unstackedYhatMN(:,iSubj,iT),thisSubj,projectDir);
     view(20,35)
     camproj('perspective')
     axis off
     set(gcf,'position',pos+[362 0 0 0]);
-    title({'Minimum-Norm Fit';['Participant: ' thisSubj]})
     
-    figure(500+iSubj);
+    
+    thisFrame = getframe(figH,[90 100 190 300]);
+   
+    allMNTopos = [allMNTopos thisFrame.cdata];
+    
+    
+    %if rendering multiple topos close ones we don't need. 
+    if closeTopoFigs
+        close(figH);
+    else
+        title({'Minimum-Norm Fit';['Participant: ' thisSubj]});
+    end
+    
+    
+    
+    figH=figure(500+iSubj);
     clf
     %plotOnEgi(unstacked(:,iSubj,iT));
     plotContourOnScalp(unstackedYhatLASSO(:,iSubj,iT),thisSubj,projectDir)
@@ -550,15 +611,62 @@ for iSubj = subjList,
     camproj('perspective')
     axis off
     set(gcf,'position',pos+2*[362 0 0 0]);
-    title({'Group LASSO fit';['Participant: ' thisSubj]})
+    
+    thisFrame = getframe(figH,[90 100 190 300]);
+    
+    allGLTopos = [allGLTopos thisFrame.cdata];
+    
+    
+    %if rendering multiple topos close ones we don't need. 
+    if closeTopoFigs
+        close(figH);
+    else
+       title({'Group LASSO fit';['Participant: ' thisSubj]});
+    end
+    
+    
   
 end
 
+%%
+%Plot all topoggraphies on a single figure. 
+if strcmp(numChoice,'All')
+    figure(600)
+    allTopoCat = [allDataTopos;allMNTopos;allGLTopos];
+    imagesc(allTopoCat)
+    axis ij
+    axis off
+    truesize(gcf);
+    
+    xPos = size(allDataTopos,1);
+    text(-50,round(xPos/2),'Data')
+    
+end
+
+
+%Don't plot anything if not asked. 
     case 'No',
         
 end
 %%
 
+id=1;
+idList=[1 2 3 4 6 8 9];
+fFull =[];
+for id = idList,
+    
+for i=1:3,
+
+    h=figure((i+2)*100+id);
+    
+     %name = ['compo' num2str(iSubj) '_time_' num2str(round(iT*Axx.dTms))];     
+    %saveas(gcf,name,'png');
+    f(i) = getframe(h,[90 100 190 300]);
+end
+fCat = cat(1,f(1).cdata,f(2).cdata,f(3).cdata);
+
+fFull = [fFull fCat];
+end
 %% Create data topographies from each participant.
 
 %The dimensionality reduced data is fit in the main algorithm.  Uncomment

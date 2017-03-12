@@ -1,6 +1,6 @@
-function [ H ex] = plotContourOnScalp( data, subjId, mrcProjDir,cMapRange,myColormap )
+function [ p ex] = plotContourOnScalp( data, subjId, mrcProjDir,cMapRange,myColormap )
 %plotContourOnScalp Plot's contour maps on a realistic scalp surface.
-%function [ H ] = plotContourOnScalp( data, subjId, mrcProjDir,cMapRange )
+%function [ scalpHandle electrodeLocations] = plotContourOnScalp( data, subjId, mrcProjDir,cMapRange )
 %   Detailed explanation goes here
 
 h = 10;		% estimated sensor height (mm)
@@ -19,8 +19,6 @@ end
 
 
 %TODO: ADD ERROR CHECKING.
-
-%fsDir = getpref('freesurfer','SUBJECTS_DIR')
 scalpFileDir = getpref('mrLASSO','scalpFileDir');
 scalpFile = fullfile(scalpFileDir,[ subjId '_fs4-head.fif']);
 
