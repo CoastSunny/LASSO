@@ -31,7 +31,7 @@ end
 % Setup paths and directories
 myLocation = mfilename('fullpath');
 myDir = fileparts(myLocation);
-addpath(genpath(myDir));
+%addpath(genpath(myDir));
 
 datafileDir = fullfile(myDir,'datafiles');
 if ~exist(datafileDir,'dir')
@@ -230,6 +230,8 @@ end
 % PK: moved this down to avoid conflict with v generated above
 
 disp('Starting group LASSO');
+
+disp('Reducing dimensionality of data');
 [~, ~, v] = svd(Y);
 Ytrans = Y * v(:, 1:numCols);
 
@@ -255,6 +257,9 @@ end
 betaOls = (X'*X + alphaVal*eye(size(X,2))) \ (X'*Ytrans);
 
 % FITTING
+disp(['Findig Group-LASSO solution for ' num2str(nLambda) ' regularization (lambda) values']) ;
+
+%Find the optimal regularization parameter for the group-lasso solutions
 betaInit = zeros(size(X,2), numCols);
 betaVal = cell(1, nLambda);
 objValues = cell(1, nLambda);
@@ -270,6 +275,7 @@ for i = 1:nLambda
 end
 [~, bestIndex] = min(gcvError);
 YhatLASSO = stackedForwards*betaVal{bestIndex}(indexer, :);
+
 
 % compute average of average metrics
 for s = 1:numSubs
