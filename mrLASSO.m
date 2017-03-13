@@ -1,6 +1,9 @@
 %%
 clear all;
 close all;
+disp('mrLASSO - Beginning Data Analysis')
+disp('Setting up directory structure and some parameters')
+
 
 msgTxt = {'This script implements fMRI ROI informed group constrained source localization',...
     '1) Compute minimum-norm inverse solution',...
@@ -63,7 +66,8 @@ nLambda = 30; % always end picking the max? (~120)
 alphaVal = 1.0817e4;
 MAX_ITER = 1e6;
 
-%% GET ROIs AND EXCLUDE MISSING
+%% GET ROIs AND EXCLUDE PARTICIPANTS WITH MISSING INFO
+disp('Loading participant ROI information.');
 
 dirList = dir(projectDir);
 
@@ -103,9 +107,11 @@ end
     end
 
 
-%% COMPUTE INVERSES: Min NOrm
-% get number of subjects and conditions
-% (should be same for all subjects)
+%% Load the EEG data
+
+
+disp('Loading EEG data')
+
 for s=1:numSubs
     % get data
     if simulateData
@@ -179,7 +185,7 @@ n = numel(Y);
 Ylo = u1(:,1:numCols)*s1(1:numCols,1:numCols)*v1(:, 1:numCols)';
 ssTotal = norm(Ylo, 'fro')^2 / n;
 
-%% DO min norm
+%% Find Minimum Norm Solution
 % minumum norm solution
 if doMinNorm
     disp('Generating minimum norm solution');
@@ -418,7 +424,7 @@ legend('Left','Right')
 %at a time and take a snapshot of the figure before destroying the figure
 %and rendering a new scalp.  For 3D view render a single participant
 
-msgtxt = [ 'The next plots show each participant one at a time.'];
+msgtxt = [ 'Recreating Figure 10'];
 disp(msgtxt);
 
 % Construct a questdlg with three options
